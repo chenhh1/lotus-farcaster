@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/apistruct"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -121,8 +123,12 @@ func NewLotusStorageMiner(ctx context.Context, addr, token string) (api.StorageM
 }
 
 func init() {
-	miner := os.Getenv("MINER_API_INFO")
-	minerArr := strings.Split(miner, ":")
+	env, err := getEnvPath()
+	if err != nil {
+		fmt.Println("getEnvPath error", err)
+		return
+	}
+	minerArr := strings.Split(env.MinerApiInfo, ":")
 	minerUrl, err := getCredentials(minerArr[1])
 	if err != nil {
 		fmt.Println("getCredentials#minerUrl", minerArr)
@@ -132,8 +138,7 @@ func init() {
 	MinerToken = minerArr[0]
 	fmt.Println("MinerUrl:", MinerUrl, "MinerToken:", MinerToken)
 	// FULLNODE_API_INFO
-	nodeApi := os.Getenv("FULLNODE_API_INFO")
-	nodeApiArr := strings.Split(nodeApi, ":")
+	nodeApiArr := strings.Split(env.FullApiInfo, ":")
 	nodeApiUrl, err := getCredentials(nodeApiArr[1])
 	if err != nil {
 		fmt.Println("getCredentials#nodeApiUrl", nodeApiArr)
@@ -150,4 +155,35 @@ func init() {
 	if err != nil {
 		fmt.Println("NewLotusStorageMiner error")
 	}
+
+}
+
+func getEnvPath() (*Env, error) {
+	data, err := ioutil.ReadFile("/usr/local/bin/lotus-exporter-farcaster.conf")
+	if err != nil {
+		fmt.Println("文件读取失败", err.Error())
+		return nil, err
+	}
+	str := string(data)
+	str = strings.ReplaceAll(str, "#BEGIN GET ENV PATH", "")
+	str = strings.ReplaceAll(str, "#END GET ENV PATH", "")
+	fmt.Println(str)
+	var env Env
+	err = json.Unmarshal([]byte(str), &env)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	fmt.Println(env.FullApiInfo)
+	fmt.Println(env.MinerApiInfo)
+	fmt.Println(env.LotusPath)
+	fmt.Println(env.LotusMinerPath)
+	return &env, nil
+}
+
+type Env struct {
+	FullApiInfo    string `json:FULLNODE_API_INFO`
+	MinerApiInfo   string `json:MINER_API_INFO`
+	LotusPath      string `json:LOTUS_PATH`
+	LotusMinerPath string `json:LOTUS_MINER_PATH`
 }
