@@ -52,18 +52,48 @@ func main() {
 		fmt.Println("minerHost error", err)
 		return
 	}
-
-	// RETRIEVE TIPSET + CHAINHEAD
-	// 链头
-	chainHead, err := fullNode.ChainHead(context.Background())
+	// 生成  SECTORS
+	// GENERATE SECTORS
+	fmt.Println("# ")
+	fmt.Println("# HELP lotus_miner_sector_state sector state")
+	fmt.Println("# TYPE lotus_miner_sector_state gauge")
+	fmt.Println("# HELP lotus_miner_sector_event contains important event of the sector life")
+	fmt.Println("# TYPE lotus_miner_sector_event gauge")
+	fmt.Println("# HELP lotus_miner_sector_sealing_deals_info contains information related to deals that are not in Proving and Removed state.")
+	fmt.Println("# TYPE lotus_miner_sector_sealing_deals_info gauge")
+	sectorList, err := storageMiner.SectorsList(context.Background())
 	if err != nil {
-		fmt.Println("ChainHead error", err)
+		fmt.Println("sectorList error", err)
 		return
 	}
+	for _, sector := range sectorList {
+		detail, err := storageMiner.SectorsStatus(context.Background(), sector, false)
+		if err != nil {
+			fmt.Println("sectorList error", err)
+			return
+		}
+		// 计算 0 出现在数组中的个数
+		a := 0
+		for _, j := range detail.Deals {
+			if j == 0 {
+				a++
+			}
+		}
+		deals := len(detail.Deals) - a
+		creationDate := detail.Log[0].Timestamp
+		verifiedWeight := detail.VerifiedDealWeight
+		var pledged int
+		if detail.Log[0].Kind == "event;sealing.SectorStartCC" {
+			pledged = 1
+		} else {
+			pledged = 0
+		}
+		fmt.Print("lotus_miner_sector_state { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", sector_id=", `"`, sector, `"`, ", state=", `"`, detail.State, `"`, ", pledged=", `"`, pledged, `"`, ", deals=", `"`, deals, `"`, ", verified_weight=", `"`, verifiedWeight, `"`, "} 1", "\n")
 
-	fmt.Println("# HELP lotus_chain_height return current height")
-	fmt.Println("# TYPE lotus_chain_height counter")
-	fmt.Println("lotus_chain_height {{ minerId=", minerId, ", minerHost=", minerHost, "chainHeadHeight=", chainHead.Height())
+		if string(creationDate) != "" {
+			fmt.Print("lotus_miner_sector_event { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", sector_id=", `"`, sector, `"`, ", event_type=\"creation\" } ", creationDate, "\n")
+		}
+	}
 }
 
 func apiURI(addr string) string {
