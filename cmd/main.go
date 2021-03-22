@@ -165,6 +165,7 @@ func getEnvPath() (*Env, error) {
 		return nil, err
 	}
 	str := string(data)
+	str = strings.ReplaceAll(str, "'", "\"")
 	str = strings.ReplaceAll(str, "#BEGIN GET ENV PATH", "")
 	str = strings.ReplaceAll(str, "#END GET ENV PATH", "")
 	fmt.Println(str)
@@ -182,8 +183,8 @@ func getEnvPath() (*Env, error) {
 }
 
 type Env struct {
-	FullApiInfo    string `json:FULLNODE_API_INFO`
-	MinerApiInfo   string `json:MINER_API_INFO`
-	LotusPath      string `json:LOTUS_PATH`
-	LotusMinerPath string `json:LOTUS_MINER_PATH`
+	FullApiInfo    string `json:"FULLNODE_API_INFO"`
+	MinerApiInfo   string `json:"MINER_API_INFO"`
+	LotusPath      string `json:"LOTUS_PATH"`
+	LotusMinerPath string `json:"LOTUS_MINER_PATH"`
 }
