@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/apistruct"
+	"github.com/filecoin-project/lotus/chain/types"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"io/ioutil"
@@ -59,10 +61,120 @@ func main() {
 		fmt.Println("ChainHead error", err)
 		return
 	}
-
 	fmt.Println("# HELP lotus_chain_height return current height")
 	fmt.Println("# TYPE lotus_chain_height counter")
-	fmt.Print("lotus_chain_height { miner_id=",`"`, minerId,`"`, ", miner_host=",`"`, minerHost,`"`," } ", chainHead.Height(),"\n")
+	fmt.Print("lotus_chain_height { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", chainHead.Height(), "\n")
+
+	// 生成矿工信息
+	// GENERATE MINER INFO
+	minerVersion, err := storageMiner.Version(context.Background())
+	if err != nil {
+		fmt.Println("minerVersion error", err)
+		return
+	}
+
+	var emptyTipSetKey types.TipSetKey
+	// 检索主要地址
+	// RETRIEVE MAIN ADDRESSES
+	daemonStats, err := fullNode.StateMinerInfo(context.Background(), minerId, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("daemonStats error", err)
+		return
+	}
+	minerOwner := daemonStats.Owner
+	minerOwnerAddr, err := fullNode.StateAccountKey(context.Background(), minerOwner, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("minerOwnerAddr error", err)
+		return
+	}
+
+	minerWorker := daemonStats.Worker
+	minerWorkerAddr, err := fullNode.StateAccountKey(context.Background(), minerWorker, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("minerWorkerAddr error", err)
+		return
+	}
+	var minerControl0 address.Address
+	if daemonStats.ControlAddresses != nil {
+		minerControl0 = daemonStats.ControlAddresses[0]
+	} else {
+		minerControl0 = minerWorker
+	}
+	minerControl0Addr, err := fullNode.StateAccountKey(context.Background(), minerControl0, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("minerControl0Addr error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_miner_info lotus miner information like adress version etc")
+	fmt.Println("# TYPE lotus_miner_info gauge")
+	fmt.Println("# HELP lotus_miner_info_sector_size lotus miner sector size")
+	fmt.Println("# TYPE lotus_miner_info_sector_size gauge")
+	fmt.Print("lotus_miner_info { miner_id = ", `"`, minerId, `"`, ", miner_host = ", `"`, minerHost, `"`, ", version=", `"`, minerVersion.Version, `"`, ", owner=", `"`, minerOwner, `"`, ", owner_addr=", `"`, minerOwnerAddr, `"`, ", worker=", `"`, minerWorker, `"`, ", worker_addr=", `"`, minerWorkerAddr, `"`, ", control0=", `"`, `"`, minerControl0, `"`, `"`, ", control0_addr=", minerControl0Addr, " } 1\n")
+	fmt.Print("lotus_miner_info_sector_size { miner_id = ", `"`, minerId, `"`, " } ", daemonStats.SectorSize, "\n")
+
+	// 生成daemon信息
+	// GENERATE DAEMON INFO
+	daemonNetwork, err := fullNode.StateNetworkName(context.Background())
+	if err != nil {
+		fmt.Println("daemonNetwork error", err)
+		return
+	}
+	daemonNetworkVersion, err := fullNode.StateNetworkVersion(context.Background(), emptyTipSetKey)
+	if err != nil {
+		fmt.Println("daemonNetworkVersion error", err)
+		return
+	}
+	daemonVersion, err := fullNode.Version(context.Background())
+	if err != nil {
+		fmt.Println("daemonVersion error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_info lotus daemon information like adress version, value is set to network version number")
+	fmt.Println("# TYPE lotus_info gauge")
+	fmt.Print("lotus_info { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", version=", `"`, daemonVersion.Version, `"`, ", network=", `"`, daemonNetwork, `"`, "} ", daemonNetworkVersion, "\n")
+
+	// walletList, err := fullNode.WalletList(context.Background())
+	// if err != nil {
+	// 	fmt.Println("walletList error", err)
+	// 	return
+	// }
+	// mPoolPending, err := fullNode.MpoolPending(context.Background(), emptyTipSetKey)
+	// if err != nil {
+	// 	fmt.Println("mPoolPending error", err)
+	// 	return
+	// }
+	// fmt.Println("# HELP lotus_mpool_total return number of message pending in mpool")
+	// fmt.Println("# TYPE lotus_mpool_total gauge")
+	// fmt.Println("# HELP lotus_mpool_local_total return total number in mpool comming from local adresses")
+	// fmt.Println("# TYPE lotus_power_local_total gauge")
+	// fmt.Println("# HELP lotus_mpool_local_message local message details")
+	// fmt.Println("# TYPE lotus_mpool_local_message gauge")
+	// mPoolTotal := 0
+	// mPoolLocalTotal := 0
+	// for _, message := range mPoolPending {
+	// 	mPoolTotal += 1
+	// 	frm := message.Message.From
+	// 	for _, value := range walletList {
+	// 		if value == frm {
+	// 			mPoolLocalTotal += 1
+	// 			var displayAddr string
+	// 			if frm == minerOwnerAddr {
+	// 				displayAddr = "owner"
+	// 			} else if frm == minerWorkerAddr {
+	// 				displayAddr = "worker"
+	// 			} else if frm == minerControl0Addr {
+	// 				displayAddr = "control0"
+	// 			} else if frm != minerId {
+	// 				// displayAddr = frm[0:5]
+	// 				displayAddr = frm.String()[0:5] + "..." + frm.String()[len(frm.String()):]
+	// 			}
+	// 			fmt.Println("lotus_mpool_local_message {{ miner_id=", minerId, ", miner_host=", minerHost, ", from=", displayAddr, ", to=", message.Message.To, ", nonce=", message.Message.Nonce, ", value=", message.Message.Value, ", gaslimit=", message.Message.GasLimit, ", gasfeecap=", message.Message.GasFeeCap, ", gaspremium=", message.Message.GasPremium, ", method=", message.Message.Method)
+	// 		}
+	// 	}
+	// }
+	//
+	// fmt.Println("lotus_mpool_total {{ miner_id=", minerId, ", miner_host=", minerHost, " }} {", mPoolTotal)
+	// fmt.Println("lotus_mpool_local_total {{ miner_id=", minerId, ", miner_host=", minerHost, " }} {", mPoolLocalTotal)
 }
 
 func apiURI(addr string) string {
