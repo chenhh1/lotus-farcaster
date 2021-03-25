@@ -103,7 +103,6 @@ func main() {
 	afterBalance, _ := fBalance.Float64()
 	fmt.Print("lotus_wallet_balance { miner_id=",`"`,minerId,`"`, ", miner_host=",`"`, minerHost,`"`, ", address=",`"`, minerId,`"`, ", short=",`"`, minerId,`"`, " } ", afterBalance/1000000000000000000.0,"\n")
 
-
 }
 
 func apiURI(addr string) string {
