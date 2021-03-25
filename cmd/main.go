@@ -7,9 +7,11 @@ import (
 	"github.com/filecoin-project/go-jsonrpc"
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/apistruct"
+	"github.com/filecoin-project/lotus/chain/types"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -60,9 +62,48 @@ func main() {
 		return
 	}
 
+	var emptyTipSetKey types.TipSetKey
+
 	fmt.Println("# HELP lotus_chain_height return current height")
 	fmt.Println("# TYPE lotus_chain_height counter")
 	fmt.Print("lotus_chain_height { miner_id=",`"`, minerId,`"`, ", miner_host=",`"`, minerHost,`"`," } ", chainHead.Height(),"\n")
+
+	// 生成钱包+锁定资金余额
+	// GENERATE WALLET + LOCKED FUNDS BALANCES
+	walletList, err := fullNode.WalletList(context.Background())
+	if err != nil {
+		fmt.Println("walletList error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_wallet_balance return wallet balance")
+	fmt.Println("# TYPE lotus_wallet_balance gauge")
+	for _, addr := range walletList {
+		balance, err := fullNode.WalletBalance(context.Background(), addr)
+		if err != nil {
+			fmt.Println("balance error", err)
+			return
+		}
+		addr := addr.String()
+		short := addr[0:5] + "..." + addr[len(addr)-5:]
+		//大整数     原值是:bigInt  -->  int  -->  bigFloat  -->   Float64
+		fBalance := new(big.Float).SetInt(balance.Int)
+		afterBalance, _ := fBalance.Float64()
+		fmt.Print("lotus_wallet_balance { miner_id=",`"`, minerId,`"`, ", miner_host=",`"`, minerHost,`"`,", address=",`"`, addr,`"`, ", short=",`"`,short,`"`, " } ", afterBalance/1000000000000000000.0,"\n")
+
+	}
+
+	// 增加矿工余额
+	// Add miner balance :
+	minerBalanceAvailable, err := fullNode.StateMinerAvailableBalance(context.Background(), minerId, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("minerBalanceAvailable error", err)
+		return
+	}
+	fBalance := new(big.Float).SetInt(minerBalanceAvailable.Int)
+	afterBalance, _ := fBalance.Float64()
+	fmt.Print("lotus_wallet_balance { miner_id=",`"`,minerId,`"`, ", miner_host=",`"`, minerHost,`"`, ", address=",`"`, minerId,`"`, ", short=",`"`, minerId,`"`, " } ", afterBalance/1000000000000000000.0,"\n")
+
+
 }
 
 func apiURI(addr string) string {
@@ -120,6 +161,8 @@ func init() {
 	if err != nil {
 		fmt.Println("NewLotusStorageMiner error")
 	}
+
+
 
 }
 
