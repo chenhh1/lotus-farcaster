@@ -173,6 +173,46 @@ func main() {
 	fmt.Println("# TYPE lotus_info gauge")
 	fmt.Print("lotus_info { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", version=", `"`, daemonVersion.Version, `"`, ", network=", `"`, daemonNetwork, `"`, " } ", daemonNetworkVersion, "\n")
 
+	// 生成 MPOOL
+	// GENERATE MPOOL
+	mPoolPending, err := fullNode.MpoolPending(context.Background(), emptyTipSetKey)
+	if err != nil {
+		fmt.Println("mpoolPending error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_mpool_total return number of message pending in mpool")
+	fmt.Println("# TYPE lotus_mpool_total gauge")
+	fmt.Println("# HELP lotus_mpool_local_total return total number in mpool comming from local adresses")
+	fmt.Println("# TYPE lotus_power_local_total gauge")
+	fmt.Println("# HELP lotus_mpool_local_message local message details")
+	fmt.Println("# TYPE lotus_mpool_local_message gauge")
+	mpoolTotal := 0
+	mpoolLocalTotal := 0
+	for _, message := range mPoolPending {
+		mpoolTotal += 1
+		frm := message.Message.From
+		for _, value := range walletList {
+			if value == frm {
+				mpoolLocalTotal += 1
+				var displayAddr string
+				if frm == minerOwnerAddr {
+					displayAddr = "owner"
+				} else if frm == minerWorkerAddr {
+					displayAddr = "worker"
+				} else if frm == minerControl0Addr {
+					displayAddr = "control0"
+				} else if frm != minerId {
+					// displayAddr = frm[0:5]
+					displayAddr = frm.String()[0:5] + "..." + frm.String()[len(frm.String()):]
+				}
+				fmt.Print("lotus_mpool_local_message { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", from=", `"`, displayAddr, `"`, ", to=", `"`, message.Message.To, `"`, ", nonce=", `"`, message.Message.Nonce, `"`, ", value=", `"`, message.Message.Value, `"`, ", gaslimit=", `"`, message.Message.GasLimit, `"`, ", gasfeecap=", `"`, message.Message.GasFeeCap, `"`, ", gaspremium=", `"`, message.Message.GasPremium, `"`, ", method=", `"`, message.Message.Method, " } 1", "\n")
+			}
+		}
+	}
+
+	fmt.Print("lotus_mpool_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mpoolTotal, "\n")
+	fmt.Print("lotus_mpool_local_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mpoolLocalTotal, "\n")
+
 	// 生成 WORKER 信息
 	// GENERATE WORKER INFOS
 	workerStats, err := storageMiner.WorkerStats(context.Background())
