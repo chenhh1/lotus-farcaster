@@ -227,6 +227,39 @@ func main() {
 		if finalizedDate != "" {
 			fmt.Print("lotus_miner_sector_event { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", sector_id=", `"`, sector, `", event_type="finalized" } `, finalizedDate, "\n")
 		}
+
+		// 这段for循环暂时无法测试到　TODO
+		list1 := [2]string{"Proving", "Removed"}
+		for _, j := range list1 {
+			if string(detail.State) != j {
+				for _, deal := range detail.Deals {
+					if deal != 0 {
+						var dealIsVerified, dealSize, dealSlashEpoch, dealPricePerEpoch, dealProviderCollateral, dealClientCollateral, dealStartEpoch, dealEndEpoch string
+						dealInfo, err := fullNode.StateMarketStorageDeal(context.Background(), deal, emptyTipSetKey)
+						if err != nil {
+							dealIsVerified = "unknown"
+							dealSize = "unknown"
+							dealSlashEpoch = "unknown"
+							dealPricePerEpoch = "unknown"
+							dealProviderCollateral = "unknown"
+							dealClientCollateral = "unknown"
+							dealStartEpoch = "unknown"
+							dealEndEpoch = "unknown"
+						} else {
+							dealIsVerified = strconv.FormatBool(dealInfo.Proposal.VerifiedDeal)
+							dealSize = string(dealInfo.Proposal.PieceSize)
+							dealSlashEpoch = string(dealInfo.State.SlashEpoch)
+							dealPricePerEpoch = dealInfo.Proposal.StoragePricePerEpoch.String()
+							dealProviderCollateral = dealInfo.Proposal.ProviderCollateral.String()
+							dealClientCollateral = dealInfo.Proposal.ClientCollateral.String()
+							dealStartEpoch = string(dealInfo.Proposal.StartEpoch)
+							dealEndEpoch = string(dealInfo.Proposal.EndEpoch)
+						}
+						fmt.Print("lotus_miner_sector_sealing_deals_size { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", sector_id=", `"`, sector, `"`, ", deal_id=", `"`, deal, `"`, ", deal_is_verified=", `"`, dealIsVerified, `"`, ", deal_slash_epoch=", `"`, dealSlashEpoch, `"`, ", deal_price_per_epoch=", `"`, dealPricePerEpoch, `"`, ",deal_provider_collateral=", `"`, dealProviderCollateral, `"`, ", deal_client_collateral=", `"`, dealClientCollateral, `"`, ", deal_size=", `"`, dealSize, `"`, ", deal_start_epoch=", `"`, dealStartEpoch, `"`, ", deal_end_epoch=", `"`, dealEndEpoch, `"`, " } 1\n")
+					}
+				}
+			}
+		}
 	}
 }
 
