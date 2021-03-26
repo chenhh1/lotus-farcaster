@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -43,6 +44,8 @@ func getCredentials(listenAddr string) (string, error) {
 }
 
 func main() {
+	// 起始时间时间戳
+	StartTime := time.Now().Unix()
 	// 检索矿工ID
 	// RETRIEVE MINER ID
 	actorAddress, err := storageMiner.ActorAddress(context.Background())
@@ -225,40 +228,31 @@ func main() {
 
 	}
 
-	// // 生成 JOB 信息
-	// // GENERATE JOB INFOS
-	// workerJobs, err := storageMiner.WorkerJobs(context.Background())
-	// if err != nil {
-	// 	fmt.Println("workerJobs error", err)
-	// 	return
-	// }
-	// fmt.Println("# HELP lotus_miner_worker_job status of each individual job running on the workers. Value is the duration")
-	// fmt.Println("# TYPE lotus_miner_worker_job gauge")
-	//
-	// for wrk, jobList := range workerJobs {
-	// 	for _, job := range jobList {
-	// 		jobId := job.ID.ID
-	// 		sector := job.Sector.Number
-	// 		// workerHost 未异常处理 todo
-	// 		workerHost := workerStats[wrk].Info.Hostname
-	// 		task := job.Task
-	// 		jobStartTime := job.Start
-	// 		runWait := job.RunWait
-	// 		// 需将 jobStartTime 转化为 以 秒 为单位的浮点数（1231243253.0）todo
-	// 		// job_start_epoch = time.mktime(time.strptime(job_start_time[:19], '%Y-%m-%dT%H:%M:%S'))
-	// 		fmt.Println("lotus_miner_worker_job {{ miner_id=", minerId, ", miner_host=", minerHost, ", job_id=", jobId, ", worker_host=", workerHost, ", task=", task, ", sector_id=", sector, ", job_start_time=", jobStartTime, ", run_wait=", runWait, " }}{ START_TIME - job_start_epoch }")
-	// 	}
-	// }
+	// 生成 JOB 信息
+	// GENERATE JOB INFOS
+	workerJobs, err := storageMiner.WorkerJobs(context.Background())
+	if err != nil {
+		fmt.Println("workerJobs error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_miner_worker_job status of each individual job running on the workers. Value is the duration")
+	fmt.Println("# TYPE lotus_miner_worker_job gauge")
 
-	// 此模块 scheddiag["result"]["SchedInfo"]["Requests"] 结果为none  todo
-	// GENERATE JOB SCHEDDIAG
-	// scheddiag = miner_get_json("SealingSchedDiag", [True])
-	// if scheddiag["result"]["SchedInfo"]["Requests"]:
-	// for req in scheddiag["result"]["SchedInfo"]["Requests"]:
-	// sector = req["Sector"]["Number"]
-	// task = req["TaskType"]
-	// print(f'lotus_miner_worker_job {{ miner_id="{miner_id}", miner_host="{miner_host}", job_id="", worker="", task="{task}", sector_id="{sector}", start="", run_wait="99" }} 0')
-	// checkpoint("SchedDiag")
+	for wrk, jobList := range workerJobs {
+		for _, job := range jobList {
+			jobId := job.ID.ID
+			sector := job.Sector.Number
+			workerHost := workerStats[wrk].Info.Hostname
+			if workerStats[wrk].Info.Hostname == "" {
+				workerHost = "unknown"
+			}
+			task := job.Task
+			jobStartTime := job.Start
+			runWait := job.RunWait
+			jobStartEpoch := jobStartTime.Unix()
+			fmt.Print("lotus_miner_worker_job { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", job_id=", `"`, jobId, `"`, ", worker_host=", `"`, workerHost, `"`, ", task=", `"`, task, `"`, ", sector_id=", `"`, sector, `"`, ", job_start_time=", `"`, jobStartTime, `"`, ", run_wait=", `"`, runWait, `" } `, StartTime-jobStartEpoch, "\n")
+		}
+	}
 
 	// 生成  SECTORS
 	// GENERATE SECTORS
