@@ -171,6 +171,95 @@ func main() {
 	fmt.Println("# TYPE lotus_info gauge")
 	fmt.Print("lotus_info { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", version=", `"`, daemonVersion.Version, `"`, ", network=", `"`, daemonNetwork, `"`, " } ", daemonNetworkVersion, "\n")
 
+	// 生成 WORKER 信息
+	// GENERATE WORKER INFOS
+	workerStats, err := storageMiner.WorkerStats(context.Background())
+	if err != nil {
+		fmt.Println("workerStats error", err)
+		return
+	}
+	fmt.Println("# HELP lotus_miner_worker_mem_physical_used worker minimal memory used")
+	fmt.Println("# TYPE lotus_miner_worker_mem_physical_used gauge")
+	fmt.Println("# HELP lotus_miner_worker_mem_vmem_used worker maximum memory used")
+	fmt.Println("# TYPE lotus_miner_worker_mem_vmem_used gauge")
+	fmt.Println("# HELP lotus_miner_worker_mem_reserved worker memory reserved by lotus")
+	fmt.Println("# TYPE lotus_miner_worker_mem_reserved gauge")
+	fmt.Println("# HELP lotus_miner_worker_gpu_used is the GPU used by lotus")
+	fmt.Println("# TYPE lotus_miner_worker_gpu_used gauge")
+	fmt.Println("# HELP lotus_miner_worker_cpu_used number of CPU used by lotus")
+	fmt.Println("# TYPE lotus_miner_worker_cpu_used gauge")
+	fmt.Println("# HELP lotus_miner_worker_cpu number of CPU")
+	fmt.Println("# TYPE lotus_miner_worker_cpu gauge")
+	fmt.Println("# HELP lotus_miner_worker_gpu number of GPU")
+	fmt.Println("# TYPE lotus_miner_worker_gpu gauge")
+	fmt.Println("# HELP lotus_miner_worker_mem_physical server RAM")
+	fmt.Println("# TYPE lotus_miner_worker_mem_physical gauge")
+	fmt.Println("# HELP lotus_miner_worker_mem_swap server SWAP")
+	fmt.Println("# TYPE lotus_miner_worker_mem_swap gauge")
+	for _, val := range workerStats {
+		Info := val.Info
+		workerHost := Info.Hostname
+		memPhysical := Info.Resources.MemPhysical
+		memSwap := Info.Resources.MemSwap
+		memReserved := Info.Resources.MemReserved
+		cpus := Info.Resources.CPUs
+		gpus := len(Info.Resources.GPUs)
+		memUsedMin := val.MemUsedMin
+		memUsedMax := val.MemUsedMax
+		var gpuUsed int
+		if val.GpuUsed {
+			gpuUsed = 1
+		} else {
+			gpuUsed = 0
+		}
+		cpuUsed := val.CpuUse
+		fmt.Print("lotus_miner_worker_cpu { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", cpus, "\n")
+		fmt.Print("lotus_miner_worker_gpu { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", gpus, "\n")
+		fmt.Print("lotus_miner_worker_mem_physical { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memPhysical, "\n")
+		fmt.Print("lotus_miner_worker_mem_swap { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memSwap, "\n")
+		fmt.Print("lotus_miner_worker_mem_physical_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memUsedMin, "\n")
+		fmt.Print("lotus_miner_worker_mem_vmem_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memUsedMax, "\n")
+		fmt.Print("lotus_miner_worker_mem_reserved { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memReserved, "\n")
+		fmt.Print("lotus_miner_worker_gpu_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", gpuUsed, "\n")
+		fmt.Print("lotus_miner_worker_cpu_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", cpuUsed, "\n")
+
+	}
+
+	// // 生成 JOB 信息
+	// // GENERATE JOB INFOS
+	// workerJobs, err := storageMiner.WorkerJobs(context.Background())
+	// if err != nil {
+	// 	fmt.Println("workerJobs error", err)
+	// 	return
+	// }
+	// fmt.Println("# HELP lotus_miner_worker_job status of each individual job running on the workers. Value is the duration")
+	// fmt.Println("# TYPE lotus_miner_worker_job gauge")
+	//
+	// for wrk, jobList := range workerJobs {
+	// 	for _, job := range jobList {
+	// 		jobId := job.ID.ID
+	// 		sector := job.Sector.Number
+	// 		// workerHost 未异常处理 todo
+	// 		workerHost := workerStats[wrk].Info.Hostname
+	// 		task := job.Task
+	// 		jobStartTime := job.Start
+	// 		runWait := job.RunWait
+	// 		// 需将 jobStartTime 转化为 以 秒 为单位的浮点数（1231243253.0）todo
+	// 		// job_start_epoch = time.mktime(time.strptime(job_start_time[:19], '%Y-%m-%dT%H:%M:%S'))
+	// 		fmt.Println("lotus_miner_worker_job {{ miner_id=", minerId, ", miner_host=", minerHost, ", job_id=", jobId, ", worker_host=", workerHost, ", task=", task, ", sector_id=", sector, ", job_start_time=", jobStartTime, ", run_wait=", runWait, " }}{ START_TIME - job_start_epoch }")
+	// 	}
+	// }
+
+	// 此模块 scheddiag["result"]["SchedInfo"]["Requests"] 结果为none  todo
+	// GENERATE JOB SCHEDDIAG
+	// scheddiag = miner_get_json("SealingSchedDiag", [True])
+	// if scheddiag["result"]["SchedInfo"]["Requests"]:
+	// for req in scheddiag["result"]["SchedInfo"]["Requests"]:
+	// sector = req["Sector"]["Number"]
+	// task = req["TaskType"]
+	// print(f'lotus_miner_worker_job {{ miner_id="{miner_id}", miner_host="{miner_host}", job_id="", worker="", task="{task}", sector_id="{sector}", start="", run_wait="99" }} 0')
+	// checkpoint("SchedDiag")
+
 	// 生成  SECTORS
 	// GENERATE SECTORS
 	fmt.Println("# HELP lotus_miner_sector_state sector state")
