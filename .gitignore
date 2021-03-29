@@ -23,4 +23,4 @@ vendor/
 
 tmp/
 
-lotus-exporter-farcaster.*
+lotus-exporter-farcaster*
