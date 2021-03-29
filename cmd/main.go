@@ -9,6 +9,7 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/apistruct"
 	"github.com/filecoin-project/lotus/chain/types"
+	sectorstorage "github.com/filecoin-project/lotus/extern/sector-storage"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"io/ioutil"
@@ -18,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	// "time"
 )
 
 var (
@@ -186,14 +189,14 @@ func main() {
 	fmt.Println("# TYPE lotus_power_local_total gauge")
 	fmt.Println("# HELP lotus_mpool_local_message local message details")
 	fmt.Println("# TYPE lotus_mpool_local_message gauge")
-	mpoolTotal := 0
-	mpoolLocalTotal := 0
+	mPoolTotal := 0
+	mPoolLocalTotal := 0
 	for _, message := range mPoolPending {
-		mpoolTotal += 1
+		mPoolTotal += 1
 		frm := message.Message.From
 		for _, value := range walletList {
 			if value == frm {
-				mpoolLocalTotal += 1
+				mPoolLocalTotal += 1
 				var displayAddr string
 				if frm == minerOwnerAddr {
 					displayAddr = "owner"
@@ -210,8 +213,8 @@ func main() {
 		}
 	}
 
-	fmt.Print("lotus_mpool_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mpoolTotal, "\n")
-	fmt.Print("lotus_mpool_local_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mpoolLocalTotal, "\n")
+	fmt.Print("lotus_mpool_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mPoolTotal, "\n")
+	fmt.Print("lotus_mpool_local_total { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, " } ", mPoolLocalTotal, "\n")
 
 	// 生成 WORKER 信息
 	// GENERATE WORKER INFOS
@@ -264,7 +267,6 @@ func main() {
 		fmt.Print("lotus_miner_worker_mem_reserved { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", memReserved, "\n")
 		fmt.Print("lotus_miner_worker_gpu_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", gpuUsed, "\n")
 		fmt.Print("lotus_miner_worker_cpu_used { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", worker_host=", `"`, workerHost, `"`, " } ", cpuUsed, "\n")
-
 	}
 
 	// 生成 JOB 信息
@@ -295,13 +297,16 @@ func main() {
 
 	// 此模块 scheddiag["result"]["SchedInfo"]["Requests"] 结果为none  todo
 	// GENERATE JOB SCHEDDIAG
-	// scheddiag = miner_get_json("SealingSchedDiag", [True])
-	// if scheddiag["result"]["SchedInfo"]["Requests"]:
-	// for req in scheddiag["result"]["SchedInfo"]["Requests"]:
-	// sector = req["Sector"]["Number"]
-	// task = req["TaskType"]
-	// print(f'lotus_miner_worker_job {{ miner_id="{miner_id}", miner_host="{miner_host}", job_id="", worker="", task="{task}", sector_id="{sector}", start="", run_wait="99" }} 0')
-	// checkpoint("SchedDiag")
+	scheduleDiag, err := storageMiner.SealingSchedDiag(context.Background(), true)
+	if err != nil {
+		fmt.Println("schedDiag error", err)
+	}
+	scheduleInfo := scheduleDiag.(sectorstorage.SchedDiagInfo)
+	for _, req := range scheduleInfo.Requests {
+		sector := req.Sector.Number
+		task := req.TaskType
+		fmt.Print("lotus_miner_worker_job { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `", job_id="", worker="", task="`, task, `"`, ", sector_id=", `"`, sector, `", start="", run_wait="99" } 0`, "\n")
+	}
 
 	// 生成  SECTORS
 	// GENERATE SECTORS
@@ -392,113 +397,113 @@ func main() {
 				}
 			}
 		}
+	}
 
-		// GENERATE DEADLINES
-		provenPartitions, err := fullNode.StateMinerDeadlines(context.Background(), minerId, emptyTipSetKey)
+	// GENERATE DEADLINES
+	provenPartitions, err := fullNode.StateMinerDeadlines(context.Background(), minerId, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("provenPartitions error", err)
+		return
+	}
+	deadlines, err := fullNode.StateMinerProvingDeadline(context.Background(), minerId, emptyTipSetKey)
+	if err != nil {
+		fmt.Println("deadlines error", err)
+		return
+	}
+	dlEpoch, err := strconv.Atoi(deadlines.CurrentEpoch.String())
+	if err != nil {
+		fmt.Println("dlEpoch error", err)
+		return
+	}
+	dlIndex := deadlines.Index
+	dlOpen := deadlines.Open
+	dlNumbers := deadlines.WPoStPeriodDeadlines
+	dlWindow := deadlines.WPoStChallengeWindow
+	fmt.Println("# HELP lotus_miner_deadline_info deadlines and WPoSt informations")
+	fmt.Println("# TYPE lotus_miner_deadline_info gauge")
+	fmt.Print("lotus_miner_deadline_info { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", current_idx=", `"`, dlIndex, `"`, ", current_epoch=", `"`, dlEpoch, `"`, ",current_open_epoch=", `"`, dlOpen, `"`, ", wpost_period_deadlines=", `"`, dlNumbers, `"`, ", wpost_challenge_window=", `"`, dlWindow, `" } 1`, "\n")
+	fmt.Println("# HELP lotus_miner_deadline_active_start remaining time before deadline start")
+	fmt.Println("# TYPE lotus_miner_deadline_active_start gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_sectors_all number of sectors in the deadline")
+	fmt.Println("# TYPE lotus_miner_deadline_active_sectors_all gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_sectors_recovering number of sectors in recovering state")
+	fmt.Println("# TYPE lotus_miner_deadline_active_sectors_recovering gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_sectors_faulty number of faulty sectors")
+	fmt.Println("# TYPE lotus_miner_deadline_active_sectors_faulty gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_sectors_live number of live sectors")
+	fmt.Println("# TYPE lotus_miner_deadline_active_sectors_live gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_sectors_active number of active sectors")
+	fmt.Println("# TYPE lotus_miner_deadline_active_sectors_active gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_partitions number of partitions in the deadline")
+	fmt.Println("# TYPE lotus_miner_deadline_active_partitions gauge")
+	fmt.Println("# HELP lotus_miner_deadline_active_partitions_proven number of partitions already proven for the deadline")
+	fmt.Println("# TYPE lotus_miner_deadline_active_partitions_proven gauge")
+	for i := 0; i < int(dlNumbers); i++ {
+		idx := (int(dlIndex) + i) % int(dlNumbers)
+		opened := int(dlOpen) + int(dlWindow)*i
+		partitions, err := fullNode.StateMinerPartitions(context.Background(), minerId, uint64(idx), emptyTipSetKey)
 		if err != nil {
-			fmt.Println("provenPartitions error", err)
+			fmt.Println("partitions error", err)
 			return
 		}
-		deadlines, err := fullNode.StateMinerProvingDeadline(context.Background(), minerId, emptyTipSetKey)
-		if err != nil {
-			fmt.Println("deadlines error", err)
-			return
-		}
-		dlEpoch, err := strconv.Atoi(deadlines.CurrentEpoch.String())
-		if err != nil {
-			fmt.Println("dlEpoch error", err)
-			return
-		}
-		dlIndex := deadlines.Index
-		dlOpen := deadlines.Open
-		dlNumbers := deadlines.WPoStPeriodDeadlines
-		dlWindow := deadlines.WPoStChallengeWindow
-		fmt.Println("# HELP lotus_miner_deadline_info deadlines and WPoSt informations")
-		fmt.Println("# TYPE lotus_miner_deadline_info gauge")
-		fmt.Print("lotus_miner_deadline_info { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", current_idx=", `"`, dlIndex, `"`, ", current_epoch=", `"`, dlEpoch, `"`, ",current_open_epoch=", `"`, dlOpen, `"`, ", wpost_period_deadlines=", `"`, dlNumbers, `"`, ", wpost_challenge_window=", `"`, dlWindow, `" } 1`, "\n")
-		fmt.Println("# HELP lotus_miner_deadline_active_start remaining time before deadline start")
-		fmt.Println("# TYPE lotus_miner_deadline_active_start gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_sectors_all number of sectors in the deadline")
-		fmt.Println("# TYPE lotus_miner_deadline_active_sectors_all gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_sectors_recovering number of sectors in recovering state")
-		fmt.Println("# TYPE lotus_miner_deadline_active_sectors_recovering gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_sectors_faulty number of faulty sectors")
-		fmt.Println("# TYPE lotus_miner_deadline_active_sectors_faulty gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_sectors_live number of live sectors")
-		fmt.Println("# TYPE lotus_miner_deadline_active_sectors_live gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_sectors_active number of active sectors")
-		fmt.Println("# TYPE lotus_miner_deadline_active_sectors_active gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_partitions number of partitions in the deadline")
-		fmt.Println("# TYPE lotus_miner_deadline_active_partitions gauge")
-		fmt.Println("# HELP lotus_miner_deadline_active_partitions_proven number of partitions already proven for the deadline")
-		fmt.Println("# TYPE lotus_miner_deadline_active_partitions_proven gauge")
-		for i := 0; i < int(dlNumbers); i++ {
-			idx := (int(dlIndex) + i) % int(dlNumbers)
-			opened := int(dlOpen) + int(dlWindow)*i
-			partitions, err := fullNode.StateMinerPartitions(context.Background(), minerId, uint64(idx), emptyTipSetKey)
+		if partitions != nil {
+			faulty := 0
+			recovering := 0
+			alls := 0
+			active := 0
+			live := 0
+			count := len(partitions)
+			proven, err := provenPartitions[idx].PostSubmissions.Count()
 			if err != nil {
-				fmt.Println("partitions error", err)
+				fmt.Println("proven error ", err)
 				return
 			}
-			if partitions != nil {
-				faulty := 0
-				recovering := 0
-				alls := 0
-				active := 0
-				live := 0
-				count := len(partitions)
-				proven, err := provenPartitions[idx].PostSubmissions.Count()
+
+			for _, partition := range partitions {
+				a, err := partition.FaultySectors.Count()
 				if err != nil {
 					fmt.Println("proven error ", err)
 					return
 				}
+				faulty += int(a)
 
-				for _, partition := range partitions {
-					a, err := partition.FaultySectors.Count()
-					if err != nil {
-						fmt.Println("proven error ", err)
-						return
-					}
-					faulty += int(a)
-
-					b, err := partition.RecoveringSectors.Count()
-					if err != nil {
-						fmt.Println("proven error ", err)
-						return
-					}
-					recovering += int(b)
-
-					c, err := partition.ActiveSectors.Count()
-					if err != nil {
-						fmt.Println("proven error ", err)
-						return
-					}
-					active += int(c)
-
-					d, err := partition.LiveSectors.Count()
-					if err != nil {
-						fmt.Println("proven error ", err)
-						return
-					}
-					live += int(d)
-
-					e, err := partition.AllSectors.Count()
-					if err != nil {
-						fmt.Println("proven error ", err)
-						return
-					}
-					alls = int(e)
-
+				b, err := partition.RecoveringSectors.Count()
+				if err != nil {
+					fmt.Println("proven error ", err)
+					return
 				}
-				fmt.Print("lotus_miner_deadline_active_start { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", (opened-dlEpoch)*30, "\n")
-				fmt.Print("lotus_miner_deadline_active_partitions_proven { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", proven, "\n")
-				fmt.Print("lotus_miner_deadline_active_partitions { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", count, "\n")
-				fmt.Print("lotus_miner_deadline_active_sectors_all { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", alls, "\n")
-				fmt.Print("lotus_miner_deadline_active_sectors_recovering { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", recovering, "\n")
-				fmt.Print("lotus_miner_deadline_active_sectors_faulty { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", faulty, "\n")
-				fmt.Print("lotus_miner_deadline_active_sectors_active { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", active, "\n")
-				fmt.Print("lotus_miner_deadline_active_sectors_live { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", live, "\n")
+				recovering += int(b)
+
+				c, err := partition.ActiveSectors.Count()
+				if err != nil {
+					fmt.Println("proven error ", err)
+					return
+				}
+				active += int(c)
+
+				d, err := partition.LiveSectors.Count()
+				if err != nil {
+					fmt.Println("proven error ", err)
+					return
+				}
+				live += int(d)
+
+				e, err := partition.AllSectors.Count()
+				if err != nil {
+					fmt.Println("proven error ", err)
+					return
+				}
+				alls = int(e)
+
 			}
+			fmt.Print("lotus_miner_deadline_active_start { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", (opened-dlEpoch)*30, "\n")
+			fmt.Print("lotus_miner_deadline_active_partitions_proven { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", proven, "\n")
+			fmt.Print("lotus_miner_deadline_active_partitions { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", count, "\n")
+			fmt.Print("lotus_miner_deadline_active_sectors_all { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", alls, "\n")
+			fmt.Print("lotus_miner_deadline_active_sectors_recovering { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", recovering, "\n")
+			fmt.Print("lotus_miner_deadline_active_sectors_faulty { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", faulty, "\n")
+			fmt.Print("lotus_miner_deadline_active_sectors_active { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", active, "\n")
+			fmt.Print("lotus_miner_deadline_active_sectors_live { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `"`, ", index=", `"`, idx, `"`, " } ", live, "\n")
 		}
 	}
 }
