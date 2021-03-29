@@ -9,18 +9,16 @@ import (
 	"github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/api/apistruct"
 	"github.com/filecoin-project/lotus/chain/types"
-	sectorstorage "github.com/filecoin-project/lotus/extern/sector-storage"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	"io/ioutil"
+	"lotus-farcaster/pkg/model"
 	"math/big"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	// "time"
 )
 
 var (
@@ -295,17 +293,22 @@ func main() {
 		}
 	}
 
-	// 此模块 scheddiag["result"]["SchedInfo"]["Requests"] 结果为none  todo
 	// GENERATE JOB SCHEDDIAG
 	scheduleDiag, err := storageMiner.SealingSchedDiag(context.Background(), true)
 	if err != nil {
 		fmt.Println("schedDiag error", err)
 	}
-	scheduleInfo := scheduleDiag.(sectorstorage.SchedDiagInfo)
-	for _, req := range scheduleInfo.Requests {
-		sector := req.Sector.Number
-		task := req.TaskType
-		fmt.Print("lotus_miner_worker_job { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `", job_id="", worker="", task="`, task, `"`, ", sector_id=", `"`, sector, `", start="", run_wait="99" } 0`, "\n")
+	maps := scheduleDiag.(map[string]interface{})["SchedInfo"]
+	scheduleDiagMap := maps.(map[string]interface{})
+	requests := scheduleDiagMap["Requests"]
+	if requests != nil {
+		// todo　此代码无法测试到
+		requestInfos := requests.([]model.SchedDiagRequestInfo)
+		for _, req := range requestInfos {
+			sector := req.Sector.Number
+			task := req.TaskType
+			fmt.Print("lotus_miner_worker_job { miner_id=", `"`, minerId, `"`, ", miner_host=", `"`, minerHost, `", job_id="", worker="", task="`, task, `"`, ", sector_id=", `"`, sector, `", start="", run_wait="99" } 0`, "\n")
+		}
 	}
 
 	// 生成  SECTORS
